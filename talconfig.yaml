@@ -1,5 +1,5 @@
 clusterName: talos-cluster
-talosVersion: v1.2.0
+talosVersion: v1.1.0
 kubernetesVersion: v1.23.6
 endpoint: https://192.168.30.81:6443
 allowSchedulingOnMasters: false
@@ -13,8 +13,8 @@ coreDNS:
 cniConfig:
   name: custom
   urls:
-    - https://raw.githubusercontent.com/dfroberg/talos/main/cilium.yaml
-    - https://raw.githubusercontent.com/dfroberg/talos/main/configmap.yaml
+    - https://raw.githubusercontent.com/dfroberg/talos/master/cilium.yaml
+    - https://raw.githubusercontent.com/dfroberg/talos/master/configmap.yaml
 nodes:
   - hostname: master1
     ipAddress: 192.168.30.81
