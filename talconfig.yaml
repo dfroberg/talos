@@ -1,0 +1,227 @@
+clusterName: talos-cluster
+talosVersion: v1.2.0
+kubernetesVersion: v1.23.6
+endpoint: https://192.168.30.81:6443
+allowSchedulingOnMasters: false
+clusterPodNets:
+  - 10.69.0.0/16
+clusterSvcNets:
+  - 10.96.0.0/16
+domain: "${domain}"
+coreDNS:
+  disabled: true
+cniConfig:
+  name: custom
+  urls:
+    - https://raw.githubusercontent.com/dfroberg/talos/main/cilium.yaml
+    - https://raw.githubusercontent.com/dfroberg/talos/main/configmap.yaml
+nodes:
+  - hostname: master1
+    ipAddress: 192.168.30.81
+    controlPlane: true
+    installDisk: /dev/sdb
+    bootloader: true
+    wipe: true
+    nameservers:
+      - 192.168.30.1
+    networkInterfaces:
+      - interface: eth0
+        dhcp: true
+        vip:
+          ip: 192.168.30.80
+    configPatches:
+      - op: add
+        path: /cluster/apiServer/certSANs
+        value:
+          - 192.168.30.81
+          - 192.168.30.80
+          - master1
+  - hostname: master2
+    ipAddress: 192.168.30.82
+    controlPlane: true
+    installDisk: /dev/sdb
+    bootloader: true
+    wipe: true
+    networkInterfaces:
+      - interface: eth0
+        dhcp: true
+        vip:
+          ip: 192.168.30.80
+    configPatches:
+      - op: add
+        path: /cluster/apiServer/certSANs
+        value:
+          - 192.168.30.82
+          - 192.168.30.80
+          - master2
+      - op: add
+        path: /machine/kubelet/registerWithFQDN
+        value: true
+  - hostname: master3
+    ipAddress: 192.168.30.83
+    controlPlane: true
+    installDisk: /dev/sdb
+    bootloader: true
+    wipe: true
+    networkInterfaces:
+      - interface: eth0
+        dhcp: true
+        vip:
+          ip: 192.168.30.80
+    configPatches:
+      - op: add
+        path: /cluster/apiServer/certSANs
+        value:
+          - 192.168.30.83
+          - 192.168.30.80
+          - master3
+      - op: add
+        path: /machine/kubelet/registerWithFQDN
+        value: true
+  # Workers
+  - hostname: worker1
+    ipAddress: 192.168.30.84
+    controlPlane: false
+    installDisk: /dev/sdb
+    bootloader: true
+    wipe: true
+
+controlPlane:
+  configPatches:
+    - op: add
+      path: /machine/kubelet/extraArgs
+      value:
+        rotate-server-certificates: "true"
+        feature-gates: CronJobTimeZone=true
+    - op: add
+      path: /cluster/controllerManager/extraArgs
+      value:
+        bind-address: 0.0.0.0
+    - op: add
+      path: /cluster/scheduler/extraArgs
+      value:
+        bind-address: 0.0.0.0
+  inlinePatch:
+    cluster:
+      extraManifests:
+        - https://raw.githubusercontent.com/alex1989hu/kubelet-serving-cert-approver/main/deploy/standalone-install.yaml
+        - https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+        - https://raw.githubusercontent.com/dfroberg/cluster/main/provision/terraform/talos/extramanifests/ds-qemuguestagent.yaml
+      aescbcEncryptionSecret: ${aescbcEncryptionKey}
+      aggregatorCA:
+        crt: ${k8sAggregatorCert}
+        key: ${k8sAggregatorCertKey}
+      ca:
+        crt: ${clusterCert}
+        key: ${clusterCertKey}
+      controllerManager:
+        extraArgs:
+          feature-gates: MixedProtocolLBService=true,EphemeralContainers=True,ReadWriteOncePod=true
+          bind-address: 0.0.0.0
+          node-monitor-period: "4s"
+          node-monitor-grace-period: "16s"
+          pod-eviction-timeout: "20s"
+      apiServer:
+        extraArgs:
+          anonymous-auth: true
+          oidc-issuer-url: "https://dex.k8s.aml.ink/"
+          oidc-client-id: "dex-k8s-authenticator"
+          oidc-username-claim: "preferred_username"
+          oidc-groups-claim: "groups"
+          default-not-ready-toleration-seconds: 20
+          default-unreachable-toleration-seconds: 20
+      discovery:
+        registries:
+          service:
+            disabled: true
+      etcd:
+        ca:
+          crt: ${etcdCert}
+          key: ${etcdCertKey}
+      proxy:
+        disabled: true
+        extraArgs:
+          feature-gates: MixedProtocolLBService=true,EphemeralContainers=True,ReadWriteOncePod=true
+      scheduler:
+        extraArgs:
+          feature-gates: MixedProtocolLBService=true,EphemeralContainers=True,ReadWriteOncePod=true
+      secret: ${clusterSecret}
+      serviceAccount:
+        key: ${k8sServiceAccountKey}
+      token: ${clusterToken}
+    machine:
+      token: ${machineToken}
+      ca:
+        crt: ${machineCert}
+        key: ${machineCertKey}
+      kubelet:
+        extraArgs:
+          feature-gates: GracefulNodeShutdown=true,MixedProtocolLBService=true,ReadWriteOncePod=true
+          rotate-server-certificates: "true"
+          node-status-update-frequency: "4s"
+        nodeIP:
+          validSubnets:
+            - 192.168.30.0/24
+      features:
+        rbac: true
+      network:
+        nameservers:
+          - 192.168.30.1
+      time:
+        bootTimeout: 2m0s
+        disabled: false
+        servers:
+          - 192.168.30.1
+      sysctls:
+        fs.inotify.max_user_instances: "8192"
+        fs.inotify.max_user_watches: "1048576"
+worker:
+  configPatches:
+    - op: add
+      path: /machine/kubelet/extraArgs
+      value:
+        rotate-server-certificates: "true"
+        feature-gates: CronJobTimeZone=true
+  inlinePatch:
+    cluster:
+      extraManifests:
+        - https://raw.githubusercontent.com/alex1989hu/kubelet-serving-cert-approver/main/deploy/standalone-install.yaml
+        - https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+        - https://raw.githubusercontent.com/dfroberg/cluster/main/provision/terraform/talos/extramanifests/ds-qemuguestagent.yaml
+      aescbcEncryptionSecret: ${aescbcEncryptionKey}
+      ca:
+        crt: ${clusterCert}
+        key: ${clusterCertKey}
+      discovery:
+        registries:
+          service:
+            disabled: true
+      secret: ${clusterSecret}
+      token: ${clusterToken}
+    machine:
+      token: ${machineToken}
+      ca:
+        crt: ${machineCert}
+        key: ${machineCertKey}
+      kubelet:
+        extraArgs:
+          feature-gates: MixedProtocolLBService=true,EphemeralContainers=True,ReadWriteOncePod=true
+          rotate-server-certificates: "true"
+          node-status-update-frequency: "4s"
+        nodeIP:
+          validSubnets:
+            - 192.168.30.0/24
+      features:
+        rbac: true
+      network:
+        nameservers:
+          - 192.168.30.1
+      time:
+        bootTimeout: 2m0s
+        disabled: false
+        servers:
+          - 192.168.30.1
+      sysctls:
+        fs.inotify.max_user_instances: "8192"
+        fs.inotify.max_user_watches: "1048576"
+
